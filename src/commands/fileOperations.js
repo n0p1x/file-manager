@@ -1,5 +1,5 @@
-import { createReadStream, createWriteStream, access } from "fs";
-import { unlink, rename, writeFile, stat } from "fs/promises";
+import { createReadStream, createWriteStream } from "fs";
+import { unlink, rename, writeFile, stat, access } from "fs/promises";
 import { join, resolve, basename } from "path";
 import { pipeline } from "stream/promises";
 
@@ -44,7 +44,7 @@ async function catFile(path, currentDir) {
 async function addFile(name, currentDir) {
   const fullPath = join(currentDir, name);
   try {
-    access(fullPath);
+    await access(fullPath);
     throw new Error("File already exists");
   } catch (error) {
     if (error.code === "ENOENT") {
