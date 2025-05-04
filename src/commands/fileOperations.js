@@ -62,35 +62,66 @@ async function renameFile(oldPath, newName, currentDir) {
 }
 
 async function copyFile(sourcePath, destPath, currentDir) {
-  const sourceFullPath = resolve(currentDir, sourcePath);
-  const destFullPath = resolve(currentDir, destPath);
-  const readStream = createReadStream(sourceFullPath);
-  const writeStream = createWriteStream(destFullPath);
-  await pipeline(readStream, writeStream);
+  try {
+    const sourceFullPath = resolve(currentDir, sourcePath);
+    let destFullPath = resolve(currentDir, destPath);
+
+    try {
+      await stat(sourceFullPath);
+    } catch (error) {
+      throw new Error(`Source file does not exist: ${sourcePath}`);
+    }
+
+    try {
+      const destStats = await stat(destFullPath);
+
+      if (destStats.isDirectory()) {
+        destFullPath = join(destFullPath, basename(sourceFullPath));
+      }
+    } catch (error) {}
+
+    const readStream = createReadStream(sourceFullPath);
+    const writeStream = createWriteStream(destFullPath);
+
+    await pipeline(readStream, writeStream);
+  } catch (error) {
+    console.error(`Copy error: ${error.message}`);
+    throw error; // Re-throw to be caught by the main handler
+  }
 }
 
 async function moveFile(sourcePath, destPath, currentDir) {
-  const sourceFullPath = resolve(currentDir, sourcePath);
-  let destFullPath = resolve(currentDir, destPath);
-
   try {
-    const sourceStats = await stat(sourceFullPath);
-    const destStats = await stat(destFullPath);
+    const sourceFullPath = resolve(currentDir, sourcePath);
+    let destFullPath = resolve(currentDir, destPath);
 
-    if (destStats.isDirectory()) {
-      // If destination is a directory, append the source filename
-      destFullPath = join(destFullPath, basename(sourceFullPath));
+    try {
+      await stat(sourceFullPath);
+    } catch (error) {
+      throw new Error(`Source file does not exist: ${sourcePath}`);
     }
 
-    await rename(sourceFullPath, destFullPath);
+    try {
+      const destStats = await stat(destFullPath);
+
+      if (destStats.isDirectory()) {
+        destFullPath = join(destFullPath, basename(sourceFullPath));
+      }
+    } catch (error) {}
+
+    try {
+      await rename(sourceFullPath, destFullPath);
+    } catch (error) {
+      if (error.code === "EXDEV") {
+        await copyFile(sourcePath, destPath, currentDir);
+        await removeFile(sourcePath, currentDir);
+      } else {
+        throw error;
+      }
+    }
   } catch (error) {
-    if (error.code === "EXDEV") {
-      // If rename fails due to cross-device link, fall back to copy and delete
-      await copyFile(sourcePath, destPath, currentDir);
-      await removeFile(sourcePath, currentDir);
-    } else {
-      throw error;
-    }
+    console.error(`Move error: ${error.message}`);
+    throw error;
   }
 }
 
